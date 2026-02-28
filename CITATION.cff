@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite our paper."
+title: "Bayesian Temporal Pose Networks for Uncertainty-Calibrated Laparoscopic Tool Pose Tracking"
+authors:
+  - family-names: Choudhry
+    given-names: Omar
+  - family-names: Ali
+    given-names: Sharib
+  - family-names: Biyani
+    given-names: "Chandra Shekhar"
+  - family-names: Jones
+    given-names: Dominic
+type: conference-paper
+conference:
+  name: "Medical Image Computing and Computer Assisted Intervention (MICCAI)"
+year: 2025
+license: CC-BY-NC-4.0
+repository-code: "https://github.com/omariosc/BTPN"
+keywords:
+  - pose estimation
+  - uncertainty quantification
+  - laparoscopy
+  - surgical robotics
+  - transformer
+  - bayesian deep learning
+  - tool tracking

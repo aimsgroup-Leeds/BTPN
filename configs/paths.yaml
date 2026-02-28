@@ -1,0 +1,27 @@
+# ============================================================================
+# BTPN — Data & Output Paths
+# ============================================================================
+# Edit these paths to match your local data layout.
+# All other configs reference dataset names (A, B, C) which map to directories
+# under data_root.
+
+data_root: "D:/Data/AI-ELT"
+output_root: "outputs"
+
+# Dataset directory names under data_root
+dataset_a: "7DOF2024"      # 60 trials, 7-DoF instruments, ~13 fps
+dataset_b: "BAPES2024"     # 30 trials, 7-DoF instruments, ~13 fps
+dataset_c: "6DOF2023"      # 24 trials, 6-DoF instruments, ~26 fps
+
+# Kinematic Foundation Model checkpoint (frozen prior)
+kinematic_checkpoint: "checkpoints/kinematic_foundation.pt"
+kinematic_norm_stats: "checkpoints/kinematic_foundation_norm.npz"
+
+# YOLO detection weights
+yolo_seg_weights: "checkpoints/yolo_segmentation.pt"
+yolo_pose_weights: "checkpoints/yolo_keypoints.pt"
+
+# Precomputed visual feature directories (relative to each trial)
+seg_features_dir: "YOLO_FEATURES"
+depth_embeddings_dir: "DEPTH/embeddings"
+pose_features_dir: "POSE_FEATURES"

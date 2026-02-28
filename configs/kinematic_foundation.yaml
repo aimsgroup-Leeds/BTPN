@@ -1,0 +1,90 @@
+# ============================================================================
+# Kinematic Foundation Model — Training Configuration
+# ============================================================================
+# Trains a multi-scale temporal pose predictor on kinematic data only.
+# This produces the frozen prior used by the full BTPN.
+
+# --- Model Architecture ---
+input_dim: 30               # Tool1(8) + Tool2(8) + Camera(7) + World(7)
+output_dim: 16              # Tool1(8) + Tool2(8)
+d_model: 256
+n_heads: 8
+n_encoder_layers: 6         # 2 local + 2 medium + 2 global
+ff_dim: 1024
+dropout: 0.1
+activation: "gelu"
+
+# Hierarchical Attention
+local_window: 5             # ~0.4s at 13 fps
+medium_window: 20           # ~1.5s
+local_layers: 2
+medium_layers: 2
+global_layers: 2
+
+# Memory-Enhanced Encoder
+use_memory: true
+memory_size: 64
+memory_heads: 4
+
+# Bimanual Cross-Attention
+use_cross_attention: true
+cross_attention_heads: 4
+
+# Multi-Scale Windowing
+window_scales: [10, 50, 100]
+n_scale_fusion_heads: 4
+
+# --- Probabilistic Output ---
+covariance_type: "diagonal"
+min_sigma: 0.001
+max_sigma: 10.0
+min_kappa: 1.0
+beta_nll: 0.5
+mc_dropout_rate: 0.1
+mc_samples: 30
+
+# --- Loss Weights ---
+lambda_position: 1.0
+lambda_quaternion: 3.0
+lambda_angle: 1.0
+lambda_jaw_state: 0.5
+lambda_calibration: 0.1
+calibration_start_epoch: 10
+n_calibration_bins: 10
+
+# --- Training ---
+epochs: 10000               # Early stopping controls actual duration
+batch_size: 32
+lr: 0.0003
+warmup_epochs: 15
+weight_decay: 0.00001
+gradient_clip_norm: 1.0
+early_stopping_patience: 30
+use_cosine_annealing: true
+cosine_min_lr: 0.0000001
+use_amp: false
+
+# --- Data ---
+train_dataset: "7DOF2024"
+val_dataset: "BAPES2024"
+test_dataset: "6DOF2023"
+train_val_split: 0.85
+sequence_length: 64
+
+# Augmentation
+augment_train: true
+noise_std: 0.01
+speed_range: [0.8, 1.2]
+tool_swap_prob: 0.5
+
+# --- Jaw Angle Calibration ---
+calibrate_jaw_angles: true
+jaw_lower_percentile: 10.0
+jaw_upper_percentile: 90.0
+predict_jaw_state: true
+
+# --- Infrastructure ---
+seed: 42
+num_workers: 0
+pin_memory: true
+checkpoint_every: 10

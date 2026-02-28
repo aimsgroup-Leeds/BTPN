@@ -1,0 +1,168 @@
+# ============================================================================
+# BTPN — Full Model Training Configuration
+# ============================================================================
+# Covers both Stage 1 (Visual SSL) and Stage 2 (Supervised Fine-tuning).
+# The kinematic foundation model is loaded as a frozen prior.
+
+# --- Base Model Architecture (inherited from Kinematic Foundation) ---
+input_dim: 30
+output_dim: 16
+d_model: 256
+n_heads: 8
+n_encoder_layers: 6
+ff_dim: 1024
+dropout: 0.1
+activation: "gelu"
+
+# Hierarchical Attention
+local_window: 5
+medium_window: 20
+local_layers: 2
+medium_layers: 2
+global_layers: 2
+
+# Memory-Enhanced Encoder
+use_memory: true
+memory_size: 64
+memory_heads: 4
+
+# Bimanual Cross-Attention
+use_cross_attention: true
+cross_attention_heads: 4
+
+# Multi-Scale Windowing
+window_scales: [10, 50, 100]
+n_scale_fusion_heads: 4
+
+# --- Probabilistic Output ---
+covariance_type: "diagonal"
+min_sigma: 0.001
+max_sigma: 10.0
+min_kappa: 1.0
+beta_nll: 0.5
+mc_dropout_rate: 0.1
+mc_samples: 30
+
+# --- Visual Feature Dimensions ---
+seg_neck_dim: 256           # FPN neck features per tool
+seg_backbone_dim: 512       # Global backbone features
+seg_proj_dim: 256           # Fused segmentation projection
+depth_feature_dim: 384      # DINOv2-S CLS token
+depth_proj_dim: 128
+pose_keypoint_dim: 48       # 2 tools x 8 keypoints x 3 (x, y, conf)
+pose_backbone_dim: 512      # Per-tool backbone
+pose_geometric_dim: 6       # shaft_width + midline_angle + jaw_opening
+pose_kp_proj_dim: 64
+pose_enc_proj_dim: 64
+pose_proj_dim: 128
+use_pose_features: true
+use_depth_features: true
+
+# --- Visual Encoder ---
+visual_n_layers: 6          # Clinical attention encoder layers
+visual_n_heads: 4
+visual_d_model: 256
+visual_dropout: 0.1
+visual_local_window: 8      # Layers 1-2 local span
+visual_medium_window: 20    # Layers 3-4 medium span
+
+# Cross-Modal Fusion
+cross_modal_heads: 4
+cross_modal_dropout: 0.1
+
+# Clinical Attention Scales (frames)
+visual_window_scales: [8, 40, 100, 200]
+
+# --- Multi-Channel Gate ---
+max_gate_position: 0.5
+max_gate_rotation: 0.1      # Conservative: prevents rotation corruption
+max_gate_angle: 0.5
+gate_init_temperature: 5.0
+gate_entropy_weight: 0.01
+
+# --- Relative Tracking ---
+use_relative_tracking: true
+lambda_displacement: 0.5
+max_displacement_delta: 5.0
+
+# --- Residual Correction ---
+max_position_delta: 5.0
+max_quaternion_delta: 0.15
+max_angle_delta: 1.0
+lambda_residual_reg: 0.005
+
+# --- Pivot Estimation ---
+use_pivot_estimation: true
+pivot_warmup_epochs: 60
+pivot_decay: 0.99
+pivot_inflation_threshold: 5.0
+pivot_max_inflation: 3.0
+lambda_pivot: 0.1
+
+# --- Loss Weights ---
+lambda_position: 1.0
+lambda_quaternion: 3.0
+lambda_angle: 1.0
+lambda_jaw_state: 0.5
+lambda_calibration: 0.1
+lambda_smoothness: 0.01
+calibration_start_epoch: 10
+n_calibration_bins: 10
+
+# --- Stage 1: Visual SSL Pre-training ---
+stage1_max_epochs: 500
+stage1_patience: 25
+stage1_lr: 0.0005
+lambda_mvr: 1.0             # Masked Visual Reconstruction
+lambda_vcl: 0.5             # Visual Contrastive Learning
+lambda_vtop: 0.2            # Visual Temporal Order Prediction
+lambda_vka: 0.3             # Visual-Kinematic Alignment
+mvr_mask_ratio: 0.3
+
+# --- Stage 2: Supervised Fine-tuning ---
+stage2_max_epochs: 1000
+stage2_patience: 30
+stage2_lr: 0.0003
+# Phase 2a: Warmup (fusion + gate only)
+stage2_warmup_epochs: 20
+# Phase 2b: Full training (all parameters)
+stage2_full_end_epoch: 150
+# Phase 2c: Fine-tuning (reduced LR, stricter conf)
+stage2_finetune_lr_scale: 0.1
+stage2_finetune_conf_threshold: 0.5
+
+# --- Data ---
+train_dataset: "7DOF2024"
+val_dataset: "BAPES2024"
+test_dataset: "6DOF2023"
+train_val_split: 0.85
+sample_interval: 2          # Dense sampling: ~47K samples
+positive_only: true
+sequence_length: 64
+batch_size: 16
+
+# Augmentation
+augment_train: true
+noise_std: 0.01
+speed_range: [0.8, 1.2]
+tool_swap_prob: 0.5
+
+# Jaw Angle
+calibrate_jaw_angles: true
+jaw_lower_percentile: 10.0
+jaw_upper_percentile: 90.0
+predict_jaw_state: true
+
+# --- Scheduler ---
+warmup_epochs: 5
+early_stopping_patience: 30
+gradient_clip_norm: 1.0
+use_cosine_annealing: true
+cosine_min_lr: 0.0000001
+use_amp: false
+
+# --- Infrastructure ---
+seed: 42
+num_workers: 0
+pin_memory: true
+checkpoint_every: 10

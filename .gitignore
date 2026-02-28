@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (user provides their own)
+data/**/*
+!data/sample_a/
+!data/sample_c/
+!data/README.md
+data/sample_a/**/*.mp4
+data/sample_c/**/*.mp4
+
+# Outputs
+outputs/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
