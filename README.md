@@ -251,14 +251,14 @@ See [`docs/TRAINING.md`](docs/TRAINING.md) for detailed instructions.
 If you find this work useful, please cite:
 
 ```bibtex
-@inproceedings{choudhry2025btpn,
+@inproceedings{choudhry2026btpn,
   title     = {Bayesian Temporal Pose Networks for Uncertainty-Calibrated
                Laparoscopic Tool Pose Tracking},
   author    = {Choudhry, Omar and Ali, Sharib and Biyani, Chandra Shekhar
                and Jones, Dominic},
   booktitle = {Medical Image Computing and Computer Assisted Intervention
                (MICCAI)},
-  year      = {2025}
+  year      = {2026}
 }
 ```
 
