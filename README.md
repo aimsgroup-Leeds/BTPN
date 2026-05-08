@@ -213,7 +213,12 @@ BTPN/
 ├── results/                       # LaTeX tables and evaluation data
 ├── data/                          # Sample data for testing
 │   ├── sample_a/                  # 1 trial from Dataset A (7-DoF)
+│   │   ├── label.json             # Kinematic data (all frames)
+│   │   ├── frames/                # 3 sample endoscopic frames (PNG)
+│   │   └── annotations.json       # COCO segmentation + keypoints
 │   └── sample_c/                  # 1 trial from Dataset C (6-DoF)
+│       ├── *.txt                  # Per-frame kinematic data
+│       └── frames/                # 3 sample endoscopic frames (PNG)
 └── docs/                          # Extended documentation
     ├── TRAINING.md                # Step-by-step training guide
     ├── DATA_FORMAT.md             # Dataset format specification

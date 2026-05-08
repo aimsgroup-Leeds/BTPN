@@ -5,7 +5,12 @@ This directory contains sample trials for testing the pipeline.
 ## Contents
 
 - `sample_a/` — One trial from Dataset A (7-DoF, `label.json` format)
+  - `label.json` — Full kinematic data (all frames): Tool1, Tool2, Camera, World
+  - `frames/` — 3 sample endoscopic video frames (PNG, 1920x1080)
+  - `annotations.json` — COCO-format annotations with instance segmentation masks and 8-keypoint skeletons for the sample frames
 - `sample_c/` — First 10 frames from Dataset C (6-DoF, numbered `.txt` format)
+  - `0.txt` ... `9.txt` — Per-frame kinematic data (Reference, Fenestrated, Curved, Camera)
+  - `frames/` — 3 sample endoscopic video frames (PNG, 1920x1080)
 
 ## Organizing Your Own Data
 
