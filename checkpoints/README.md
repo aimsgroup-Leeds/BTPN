@@ -7,7 +7,7 @@
 | `kinematic_foundation.pt` | 143 MB | Multi-scale temporal pose predictor | Pos MAE 5.4 mm |
 | `kinematic_foundation_norm.npz` | <1 KB | Z-score normalization statistics | — |
 | `btpn_ssl.pt` | 126 MB | Visual SSL pre-trained encoder | — |
-| `btpn_supervised.pt` | 131 MB | Final model (paper results) | Pos RMSE 6.8 mm, Rot 12.0° |
+| `btpn_supervised.pt` | 131 MB | Final model (paper results) | Pos RMSE 7.0 mm, Geo 11.7°, pos-ECE 0.028 |
 | `btpn_norm.npz` | <1 KB | Stage 2 normalization statistics | — |
 | `yolo_segmentation.pt` | 52 MB | YOLOv26m-seg instance segmentation | 91.1% mAP50-95 |
 | `yolo_keypoints.pt` | 136 MB | YOLOv26m-pose keypoint detection | 94.6% mAP50-95 |

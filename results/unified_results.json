@@ -1,0 +1,43 @@
+{
+  "sample_interval": 2,
+  "n_frames": 21048,
+  "n_tool_points": 42096,
+  "pos_std_mm": 22.58819580078125,
+  "jaw_std_raw": 0.011035067029297352,
+  "table2b": {
+    "pos_rmse_x_mm": 4.180034160614014,
+    "pos_rmse_y_mm": 4.446252346038818,
+    "pos_rmse_z_mm": 3.4720094203948975,
+    "pos_rmse_all_mm": 7.02116060256958,
+    "rot_rmse_roll_deg": 14.181868098612858,
+    "rot_rmse_pitch_deg": 7.414635518133196,
+    "rot_rmse_yaw_deg": 15.351459790043647,
+    "rot_geodesic_deg": 11.771085739135742,
+    "jaw_rmse_normalized": 0.27506354451179504,
+    "jaw_rmse_raw_units": 0.003035344651003774
+  },
+  "ece": {
+    "position_normalized": 0.058772773343468844,
+    "position_L2norm_mm": 0.02770885594830858,
+    "rotation_fisher_physical": 0.30129779551501323,
+    "rotation_vmf_physical": 0.30885195743063465,
+    "jaw": 0.07932896237172174,
+    "_paper_row_internal_pos_ece": 0.02770885594830858
+  },
+  "ece_coverage_1sigma": {
+    "position_L2norm": 0.7107088559483087,
+    "rotation_fisher": 0.9842977955150133,
+    "jaw": 0.7623289623717218
+  },
+  "rotation_stats_physical": {
+    "kappa_mean": 5.796779155731201,
+    "geodesic_deg_mean": 6.759347915649414,
+    "geodesic_deg_median": 5.060360908508301,
+    "geodesic_deg_p90": 11.108076095581055
+  },
+  "jaw_stats": {
+    "sigma_mean": 0.23907069861888885,
+    "error_mean_norm": 0.17610184848308563,
+    "error_median_norm": 0.11804555356502533
+  }
+}

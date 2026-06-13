@@ -72,7 +72,7 @@ python scripts/train.py --stage foundation --config configs/kinematic_foundation
 **Expected output:**
 - `outputs/foundation/checkpoints/best_model.pt`
 - `outputs/foundation/checkpoints/norm_stats.npz`
-- Position MAE ~5.4 mm, Rotation ~87° geodesic (kinematic-only baseline)
+- Position MAE ~5.4 mm, Rotation ~11.6° geodesic (physical-space SO(3); kinematic-only baseline)
 
 **Typical convergence:** ~80 epochs (best at ~50), ~24h on RTX 3060.
 

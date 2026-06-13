@@ -5,7 +5,7 @@ multi-scale temporal attention with visual-kinematic fusion.
 
 Reference:
     Choudhry et al., "Bayesian Temporal Pose Networks for Uncertainty-Calibrated
-    Laparoscopic Tool Pose Tracking", MICCAI 2025.
+    Laparoscopic Tool Pose Tracking", MICCAI 2026.
 """
 
 __version__ = "1.0.0"

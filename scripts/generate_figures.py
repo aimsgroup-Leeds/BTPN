@@ -1,9 +1,15 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Reproduce paper figures from evaluation data.
 
-Generates publication-quality figures for the BTPN MICCAI 2025 paper
-from saved evaluation predictions. Supports individual figure generation
-or batch mode.
+Generates publication-quality figures for the BTPN MICCAI 2026 paper from the
+released evaluation predictions. Reads results/evaluation_data.npz (Full-BTPN
+outputs under bare keys + embedded mean/std) and converts to physical units
+internally. Supports individual figure generation or batch mode.
+
+The paper's four-panel calibration figure (figures/uncertainty_quality.{png,pdf},
+with the physical-space Fisher rotation ECE and the per-trial jaw channel) is
+produced by scripts/make_uncertainty_figure.py; figure 4 here is a lighter
+position-only uncertainty summary (uncertainty.png).
 
 Usage:
     python scripts/generate_figures.py --data results/evaluation_data.npz
@@ -103,7 +109,9 @@ def cm_to_inch(cm: float) -> float:
 
 def _denormalize_eval_data(
     data: dict[str, np.ndarray],
-    norm_path: str | Path,
+    norm_path: str | Path | None,
+    mean: np.ndarray | None = None,
+    std: np.ndarray | None = None,
 ) -> dict[str, np.ndarray]:
     """Denormalize position/quaternion/sigma arrays in-place to physical units.
 
@@ -118,19 +126,24 @@ def _denormalize_eval_data(
 
     Args:
         data: Loaded evaluation arrays (modified copy returned).
-        norm_path: Path to normalization stats .npz (mean/std, 30-D).
+        norm_path: Path to normalization stats .npz (mean/std, 30-D). Ignored
+            when ``mean``/``std`` are passed directly (e.g. embedded in the npz).
+        mean, std: 30-D normalization stats to use instead of reading norm_path.
 
     Returns:
         The denormalized dictionary.
     """
-    norm_path = Path(norm_path)
-    if not norm_path.exists():
-        print(f"  WARNING: norm stats not found at {norm_path}; "
-              f"figures will be in normalized units.")
-        return data
-    ns = np.load(norm_path, allow_pickle=True)
-    mean = np.asarray(ns["mean"], dtype=np.float32)
-    std = np.asarray(ns["std"], dtype=np.float32)
+    if mean is None or std is None:
+        norm_path = Path(norm_path)
+        if not norm_path.exists():
+            print(f"  WARNING: norm stats not found at {norm_path}; "
+                  f"figures will be in normalized units.")
+            return data
+        # norm stats are plain numeric arrays -> allow_pickle=False.
+        ns = np.load(norm_path, allow_pickle=False)
+        mean = ns["mean"]; std = ns["std"]
+    mean = np.asarray(mean, dtype=np.float32)
+    std = np.asarray(std, dtype=np.float32)
     pos = (slice(0, 3), slice(8, 11))
     quat = (slice(3, 7), slice(11, 15))
     jaw = (7, 15)
@@ -180,7 +193,25 @@ def load_eval_data(
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Evaluation data not found: {path}")
-    data = dict(np.load(path, allow_pickle=True))
+    # npz holds only plain numeric arrays -> allow_pickle=False (no code-exec risk).
+    data = dict(np.load(path, allow_pickle=False))
+
+    # The released results/evaluation_data.npz stores Full-BTPN outputs under
+    # bare keys (mu_position, ...) and embeds the mean/std stats. Alias them to
+    # the v3_* keys the figure functions expect, and denormalize using the
+    # embedded stats (no external norm-stats file needed).
+    if "v3_mu_position" not in data and "mu_position" in data:
+        for src, dst in (("mu_position", "v3_mu_position"),
+                         ("mu_quaternion", "v3_mu_quaternion"),
+                         ("sigma_position", "v3_sigma_position"),
+                         ("mu_angle", "v3_mu_angle")):
+            if src in data:
+                data[dst] = data[src]
+        if "mean" in data and "std" in data:
+            data = _denormalize_eval_data(data, None,
+                                          mean=data["mean"], std=data["std"])
+            return data
+
     if norm_stats is not None:
         data = _denormalize_eval_data(data, norm_stats)
     return data
