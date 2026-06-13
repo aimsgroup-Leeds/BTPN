@@ -54,6 +54,7 @@ from btpn.metrics import (
     format_results_table,
     format_latex_table,
     format_latex_row,
+    _normalize_quaternions,
 )
 from btpn.utils import (
     enable_mc_dropout,
@@ -1238,6 +1239,203 @@ def evaluate(
 
 
 # ============================================================================
+# Offline Reproduction from Saved Predictions (.npz)
+# ============================================================================
+
+
+# Reference numbers from the accepted MICCAI 2026 paper, Table 2(b),
+# "Full BTPN" row (Dataset A held-out). Used only for side-by-side display.
+_PAPER_FULL_BTPN: dict[str, float] = {
+    "pos_x": 4.1, "pos_y": 4.4, "pos_z": 3.5, "pos_v": 6.8,
+    "roll": 14.7, "pitch": 7.3, "yaw": 15.8, "geo": 11.9,
+    "jaw_deg": 1.72, "ece": 0.013,
+}
+
+
+def evaluate_from_npz(
+    npz_path: Path,
+    norm_path: Path,
+    output_dir: Path,
+) -> dict[str, float]:
+    """Recompute Dataset-A Full-BTPN metrics from a saved predictions .npz.
+
+    This is the **offline, CPU-only** reproduction path. It needs neither a
+    model checkpoint nor the full dataset: it reads stored per-frame
+    predictions (``v3_*`` = Full BTPN, ``kin_*`` = in-model kinematic prior
+    branch) and ground-truth ``target_*`` arrays, denormalizes them with the
+    z-score stats, and evaluates the same leaf metric functions used by the
+    online path.
+
+    IMPORTANT: the ``target_*`` arrays in the .npz are stored in *normalized*
+    space (quaternion norms are not 1). They are denormalized here, up front,
+    via ``norm_path`` (mean/std). ``v3_mu_position`` is also denormalized to
+    millimetres; ``v3_mu_quaternion`` is already unit-norm. The leaf functions
+    (:func:`compute_geodesic_error`, :func:`compute_euler_errors`,
+    :func:`compute_ece`, ...) are called on these denormalized arrays directly
+    — the .npz is *not* routed through :func:`compute_per_tool_metrics`, which
+    only denormalizes positions.
+
+    Args:
+        npz_path: Path to predictions .npz (e.g. results/evaluation_data.npz).
+        norm_path: Path to normalization stats .npz (mean/std, 30-D).
+        output_dir: Directory to write the reproduced table + JSON.
+
+    Returns:
+        Flat dict of the reproduced Full-BTPN metrics.
+    """
+    if not npz_path.exists():
+        raise FileNotFoundError(f"Predictions npz not found: {npz_path}")
+    if not norm_path.exists():
+        raise FileNotFoundError(f"Normalization stats not found: {norm_path}")
+
+    print("=" * 72)
+    print("  BTPN Offline Reproduction (from saved predictions .npz)")
+    print("=" * 72)
+    print(f"  Predictions:  {npz_path}")
+    print(f"  Norm stats:   {norm_path}")
+    print(f"  Device:       cpu (no model, no full dataset required)")
+    print()
+
+    data = dict(np.load(npz_path, allow_pickle=True))
+    ns = np.load(norm_path, allow_pickle=True)
+    mean = np.asarray(ns["mean"], dtype=np.float64)
+    std = np.asarray(ns["std"], dtype=np.float64)
+
+    # Feature layout (30-D): T1 pos 0:3, T1 quat 3:7, T1 jaw 7,
+    #                        T2 pos 8:11, T2 quat 11:15, T2 jaw 15.
+    sl = {
+        "pos": (slice(0, 3), slice(8, 11)),
+        "quat": (slice(3, 7), slice(11, 15)),
+        "jaw": (7, 15),
+    }
+    n = data["v3_mu_position"].shape[0]
+    print(f"  Samples: {n:,} (Dataset A held-out, 2 tools)")
+    print()
+
+    def _denorm(arr: np.ndarray, idx: slice | int) -> np.ndarray:
+        return arr * std[idx] + mean[idx]
+
+    # --- Denormalize targets (stored normalized) ---
+    tgt_pos = [_denorm(data["target_position"][:, t], sl["pos"][t]) for t in range(2)]
+    tgt_quat = [_denorm(data["target_quaternion"][:, t], sl["quat"][t]) for t in range(2)]
+    tgt_jaw = [_denorm(data["target_angle"][:, t, 0], sl["jaw"][t]) for t in range(2)]
+
+    results: dict[str, float] = {}
+
+    def _eval_model(prefix: str) -> dict[str, float]:
+        """Compute metrics for predictions stored under *prefix* (v3 / kin)."""
+        # Position: denormalize to mm; quaternion already unit-norm.
+        pred_pos = [_denorm(data[f"{prefix}_mu_position"][:, t], sl["pos"][t]) for t in range(2)]
+        pred_quat = [data[f"{prefix}_mu_quaternion"][:, t] for t in range(2)]
+
+        # Per-axis position RMSE, averaged over the two tools (paper convention).
+        out: dict[str, float] = {}
+        for ax_i, ax_name in enumerate(["pos_x", "pos_y", "pos_z"]):
+            rmses = [
+                float(np.sqrt(np.mean((pred_pos[t][:, ax_i] - tgt_pos[t][:, ax_i]) ** 2)))
+                for t in range(2)
+            ]
+            out[ax_name] = float(np.mean(rmses))
+        # Overall ||v|| RMSE over both tools.
+        pe = np.concatenate([
+            np.linalg.norm(pred_pos[t] - tgt_pos[t], axis=-1) for t in range(2)
+        ])
+        out["pos_v"] = float(np.sqrt(np.mean(pe ** 2)))
+        out["pos_v_mean"] = float(pe.mean())
+
+        # Rotation: geodesic RMSE (both tools) + Euler RMSE per axis (avg tools).
+        # Concatenate raw per-frame geodesic errors across tools so the overall
+        # RMSE is over all samples (not an RMSE-of-RMSEs).
+        rot_err = []
+        for t in range(2):
+            q1 = _normalize_quaternions(pred_quat[t])
+            q2 = _normalize_quaternions(tgt_quat[t])
+            dot = np.clip(np.abs(np.sum(q1 * q2, axis=-1)), 0.0, 1.0)
+            rot_err.append(2.0 * np.arccos(dot) * 180.0 / np.pi)
+        all_rot = np.concatenate(rot_err)
+        out["geo"] = float(np.sqrt(np.mean(all_rot ** 2)))
+        for ax_name in ["roll", "pitch", "yaw"]:
+            vals = [compute_euler_errors(pred_quat[t], tgt_quat[t])[ax_name]["rmse_deg"]
+                    for t in range(2)]
+            out[ax_name] = float(np.mean(vals))
+
+        # Jaw angle RMSE (paper reports degrees; stored values are calibrated rad).
+        pred_jaw = [_denorm(data[f"{prefix}_mu_angle"][:, t, 0], sl["jaw"][t])
+                    for t in range(2)] if f"{prefix}_mu_angle" in data else None
+        if pred_jaw is not None:
+            jerr = np.concatenate([np.abs(pred_jaw[t] - tgt_jaw[t]) for t in range(2)])
+            out["jaw_rmse_rad"] = float(np.sqrt(np.mean(jerr ** 2)))
+            out["jaw_deg"] = float(np.degrees(out["jaw_rmse_rad"]))
+
+        # Position calibration (ECE / AUSE): denormalize sigma to mm.
+        if f"{prefix}_sigma_position" in data:
+            sig = np.concatenate([
+                np.linalg.norm(data[f"{prefix}_sigma_position"][:, t] * std[sl["pos"][t]], axis=-1)
+                for t in range(2)
+            ])
+            out["ece"] = float(compute_ece(pe, sig, n_bins=10)["ece"])
+            out["ause_norm"] = float(compute_ause(pe, sig, n_steps=20)["ause_normalized"])
+        return out
+
+    full = _eval_model("v3")
+    results = full
+
+    # --- Print side-by-side comparison against the locked paper ---
+    print("  Full BTPN -- Dataset A held-out (reproduced from npz vs paper Table 2)")
+    print("  " + "-" * 64)
+    print(f"  {'Metric':<18}{'Reproduced':>14}{'Paper':>12}{'Delta':>12}")
+    print("  " + "-" * 64)
+    rows = [
+        ("Pos x (mm)", "pos_x"), ("Pos y (mm)", "pos_y"), ("Pos z (mm)", "pos_z"),
+        ("Pos |v| (mm)", "pos_v"), ("Roll (deg)", "roll"), ("Pitch (deg)", "pitch"),
+        ("Yaw (deg)", "yaw"), ("Geo (deg)", "geo"), ("Jaw (deg)", "jaw_deg"),
+        ("ECE", "ece"),
+    ]
+    for label, key in rows:
+        rep = full.get(key)
+        pap = _PAPER_FULL_BTPN.get(key)
+        if rep is None or pap is None:
+            continue
+        prec = 3 if key == "ece" else (2 if key == "jaw_deg" else 1)
+        print(f"  {label:<18}{rep:>14.{prec}f}{pap:>12.{prec}f}{rep - pap:>+12.{prec}f}")
+    print("  " + "-" * 64)
+    print(f"  (Pos |v| mean Euclidean = {full['pos_v_mean']:.2f} mm; the table 'All' "
+          f"column is RMSE.)")
+    print()
+
+    # --- Write reproduced LaTeX row + JSON (NOT overwriting committed tables) ---
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tex_path = output_dir / "table2b_reproduced.tex"
+    row = (
+        f"\\textbf{{Full BTPN}} & "
+        f"{full['pos_x']:.1f} & {full['pos_y']:.1f} & {full['pos_z']:.1f} & {full['pos_v']:.1f} & "
+        f"{full['roll']:.1f} & {full['pitch']:.1f} & {full['yaw']:.1f} & {full['geo']:.1f} & "
+        f"{full.get('jaw_deg', float('nan')):.2f} & {full['ece']:.3f} \\\\"
+    )
+    tex_path.write_text(
+        "% Reproduced on CPU from results/evaluation_data.npz via\n"
+        "%   python scripts/evaluate.py --from-npz results/evaluation_data.npz\n"
+        "% Columns: x y z |v| (mm); roll pitch yaw geo (deg); jaw (deg); ECE.\n"
+        "% NOTE: not auto-substituted into the locked paper table; see README.\n"
+        + row + "\n",
+        encoding="utf-8",
+    )
+    json_path = output_dir / "evaluation_reproduced.json"
+    with open(json_path, "w") as f:
+        json.dump(
+            {"full_btpn_dataset_a": full, "paper_reference": _PAPER_FULL_BTPN},
+            f, indent=2,
+        )
+    print(f"  Reproduced LaTeX row -> {tex_path}")
+    print(f"  Reproduced metrics   -> {json_path}")
+    print()
+    print("=" * 72)
+    print("  Offline reproduction complete.")
+    print("=" * 72)
+    return results
+
+
+# ============================================================================
 # CLI
 # ============================================================================
 
@@ -1257,8 +1455,29 @@ def main() -> None:
     parser.add_argument(
         "--checkpoint",
         type=str,
-        required=True,
-        help="Path to model checkpoint (.pt file).",
+        default=None,
+        help="Path to model checkpoint (.pt file). Required unless --from-npz.",
+    )
+    parser.add_argument(
+        "--from-npz",
+        type=str,
+        default=None,
+        metavar="NPZ",
+        help=(
+            "Offline reproduction: recompute Dataset A (Full BTPN) pose + "
+            "calibration metrics directly from a saved predictions .npz "
+            "(e.g. results/evaluation_data.npz). Runs on CPU with NO model "
+            "checkpoint and NO full dataset. See --norm-stats."
+        ),
+    )
+    parser.add_argument(
+        "--norm-stats",
+        type=str,
+        default="checkpoints/btpn_norm.npz",
+        help=(
+            "Normalization stats (.npz with mean/std) used to denormalize "
+            "the targets stored in --from-npz. Default: checkpoints/btpn_norm.npz."
+        ),
     )
     parser.add_argument(
         "--config",
@@ -1317,6 +1536,29 @@ def main() -> None:
 
     # Set seed
     set_seed(args.seed)
+
+    # ------------------------------------------------------------------
+    # Offline reproduction path: recompute metrics from a saved .npz with
+    # no checkpoint and no full dataset (CPU-only). This regenerates the
+    # Full-BTPN / Dataset-A numbers of the paper from the committed
+    # results/evaluation_data.npz. See evaluate_from_npz().
+    # ------------------------------------------------------------------
+    if args.from_npz is not None:
+        npz_path = Path(args.from_npz)
+        if not npz_path.is_absolute():
+            npz_path = REPO_ROOT / npz_path
+        norm_path = Path(args.norm_stats)
+        if not norm_path.is_absolute():
+            norm_path = REPO_ROOT / norm_path
+        out_dir = (
+            Path(args.output_dir) if args.output_dir is not None
+            else REPO_ROOT / "results"
+        )
+        evaluate_from_npz(npz_path, norm_path, out_dir)
+        return
+
+    if args.checkpoint is None:
+        parser.error("--checkpoint is required (or use --from-npz for offline reproduction).")
 
     # Resolve checkpoint path
     checkpoint_path = Path(args.checkpoint)

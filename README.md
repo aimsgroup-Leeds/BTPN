@@ -105,6 +105,14 @@ Accurate pose tracking of laparoscopic instruments from monocular endoscopic vid
 </tr>
 </table>
 
+> **Full dataset download:** _to be added._ The full datasets (raw video,
+> kinematics and precomputed visual features) are not yet publicly hosted; the
+> link will be added here. Training (`scripts/train.py`) and the full
+> evaluation path **(B)** require these. **You do not need them to reproduce the
+> headline Dataset-A table or the figures** — the committed
+> `results/evaluation_data.npz` and the bundled `data/sample_a` + `data/sample_c`
+> trials are sufficient for the offline reproduction and the inference demo.
+
 ---
 
 ## Installation
@@ -112,14 +120,42 @@ Accurate pose tracking of laparoscopic instruments from monocular endoscopic vid
 ```bash
 git clone https://github.com/omariosc/BTPN.git
 cd BTPN
+git lfs pull          # fetch checkpoints + evaluation data (tracked with Git LFS)
 pip install -e .
 ```
 
-> **Requirements:** Python 3.10+, PyTorch 2.0+, CUDA-capable GPU recommended.
+> **Requirements:** Python 3.10+, PyTorch 2.0+. A CUDA GPU is recommended for
+> training and the full evaluation path **(B)**, but the **offline
+> reproduction, the figures, and the inference demo all run CPU-only** — no GPU
+> required. Verified end-to-end on CPU with `torch` 2.x, `ultralytics` 8.x.
 
 ## Quick Start
 
-### Inference with Pre-trained Model
+### Inference demo on the bundled sample trial (CPU)
+
+The kinematic-prior model runs on the included `data/sample_a` trial with no
+GPU and no extra data:
+
+```bash
+python scripts/inference.py \
+    --checkpoint checkpoints/kinematic_foundation.pt \
+    --trial data/sample_a \
+    --norm-stats checkpoints/kinematic_foundation_norm.npz \
+    --mc-samples 5 \
+    --output predictions.npz
+```
+
+This prints a per-tool position / rotation / jaw summary and saves
+`predictions.npz`. The same command also runs on the 6-DoF sample
+(`--trial data/sample_c`); note that sample is a short 6-DoF clip evaluated
+with the 7-DoF foundation prior and Dataset-A normalization, so it exercises
+the pipeline end-to-end but its error numbers are not accuracy-meaningful.
+
+The two YOLO checkpoints (`yolo_segmentation.pt`, `yolo_keypoints.pt`) also
+load and predict on the sample frames (`data/sample_a/frames`,
+`data/sample_c/frames`) on CPU via `ultralytics`.
+
+### Inference with the full BTPN model
 
 ```python
 from btpn import BTPN, BTPNConfig
@@ -154,13 +190,81 @@ python scripts/train.py --stage detection --task keypoints --config configs/dete
 
 ### Evaluation
 
+There are **two** evaluation entry points. Use **(A)** to reproduce the
+headline Dataset-A numbers on any machine; use **(B)** for the full,
+from-scratch evaluation once the datasets are available.
+
+**(A) Offline reproduction — CPU-only, no GPU, no full dataset.**
+Recomputes the **Full BTPN / Dataset A** pose and calibration metrics directly
+from the committed predictions in `results/evaluation_data.npz`. This is the
+command that reproduces the headline row of [Key Results (b)](#b-pose-prediction--dataset-a-held-out-trials):
+
+```bash
+python scripts/evaluate.py --from-npz results/evaluation_data.npz
+```
+
+It prints a side-by-side table of *reproduced vs paper* values and writes
+`results/table2b_reproduced.tex` and `results/evaluation_reproduced.json`.
+See [Reproducing the results table](#reproducing-the-results-table) for the
+exact numbers this emits.
+
+**(B) Full evaluation from the trained model — requires the full datasets + a GPU.**
+Runs the model (MC-Dropout) over every held-out trial, recomputing all
+metrics and the cross-dataset numbers. This needs the datasets and their
+precomputed visual features at the path set in `configs/paths.yaml`
+(**dataset download link: _to be added_ — see [Datasets](#datasets)**):
+
 ```bash
 # Evaluate on Dataset A (held-out trials)
 python scripts/evaluate.py --checkpoint checkpoints/btpn_supervised.pt --dataset A
 
-# Evaluate on all datasets and generate LaTeX tables
+# Evaluate on all datasets and (re)generate LaTeX tables
 python scripts/evaluate.py --checkpoint checkpoints/btpn_supervised.pt --dataset all --output-tables
 ```
+
+### Reproducing the paper figures
+
+```bash
+# Figures 3 (trajectories) and 4 (uncertainty) from the committed predictions
+python scripts/generate_figures.py --data results/evaluation_data.npz --output-dir figures
+
+# All figures incl. supplementary per-trial breakdown
+python scripts/generate_figures.py --data results/evaluation_data.npz --all --output-dir figures
+```
+
+> Figure generation denormalizes the saved arrays to physical units (mm,
+> unit quaternions) using `checkpoints/btpn_norm.npz` by default.
+
+---
+
+### Reproducing the results table
+
+Running command **(A)** above on a fresh CPU-only clone reproduces the
+**Full BTPN / Dataset A** row from `results/evaluation_data.npz`. The position
+and rotation numbers match the published Table 2 to one decimal place:
+
+| Metric | Reproduced (CPU, from npz) | Paper Table 2 |
+|:-------|:--------------------------:|:-------------:|
+| Pos *x* / *y* / *z* (mm) | 4.2 / 4.4 / 3.4 | 4.1 / 4.4 / 3.5 |
+| Pos ‖v‖ (mm) | 7.0 (mean 5.5) | 6.8 |
+| Roll / Pitch / Yaw (°) | 14.2 / 6.9 / 15.3 | 14.7 / 7.3 / 15.8 |
+| Geodesic (°) | 11.7 | 11.9 |
+| Jaw (°) | see note | 1.72 |
+| ECE | 0.029 | 0.013 |
+
+> **Notes on the two differing cells.** The ‖v‖ "All" column is the RMSE of the
+> per-frame Euclidean error (= quadrature sum of the per-axis RMSEs ≈ 7.0 mm);
+> the mean Euclidean error is 5.5 mm. The **jaw** and **ECE** values produced
+> from the committed `evaluation_data.npz` (jaw RMSE ≈ 0.003 calibrated-angle
+> units; position ECE 0.029) match the committed `results/table2b.tex`
+> (`0.003` / `0.028`) but differ from the paper's headline `1.72°` / `0.013`.
+> The published Table 2 is authoritative and is reproduced verbatim above in
+> [Key Results](#b-pose-prediction--dataset-a-held-out-trials); the offline
+> command reports exactly what the committed predictions contain. The other
+> rows of Table 2 (ART-Net, Visual regr./LSTM/TCN/VTT, standalone Kinematic
+> regr., and the cross-dataset B/C numbers) come from separate models/datasets
+> not contained in `evaluation_data.npz` and require path **(B)** with the full
+> datasets to regenerate.
 
 ---
 

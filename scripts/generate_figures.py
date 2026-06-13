@@ -101,11 +101,75 @@ def cm_to_inch(cm: float) -> float:
 # =============================================================================
 
 
-def load_eval_data(path: str | Path) -> dict[str, np.ndarray]:
+def _denormalize_eval_data(
+    data: dict[str, np.ndarray],
+    norm_path: str | Path,
+) -> dict[str, np.ndarray]:
+    """Denormalize position/quaternion/sigma arrays in-place to physical units.
+
+    The saved predictions .npz stores ``target_*`` and ``v3_mu_position`` in
+    z-score *normalized* space (target quaternion norms are not 1). Figures
+    need millimetres and unit quaternions, so this multiplies by the stored
+    std (and adds the mean for means; sigma is scaled by std only). Prediction
+    quaternions (``*_mu_quaternion``) are already unit-norm and left untouched.
+
+    Feature layout (30-D): T1 pos 0:3, T1 quat 3:7, T1 jaw 7,
+    T2 pos 8:11, T2 quat 11:15, T2 jaw 15.
+
+    Args:
+        data: Loaded evaluation arrays (modified copy returned).
+        norm_path: Path to normalization stats .npz (mean/std, 30-D).
+
+    Returns:
+        The denormalized dictionary.
+    """
+    norm_path = Path(norm_path)
+    if not norm_path.exists():
+        print(f"  WARNING: norm stats not found at {norm_path}; "
+              f"figures will be in normalized units.")
+        return data
+    ns = np.load(norm_path, allow_pickle=True)
+    mean = np.asarray(ns["mean"], dtype=np.float32)
+    std = np.asarray(ns["std"], dtype=np.float32)
+    pos = (slice(0, 3), slice(8, 11))
+    quat = (slice(3, 7), slice(11, 15))
+    jaw = (7, 15)
+
+    for t in range(2):
+        # Position means: x*std + mean
+        for key in ("target_position",):
+            if key in data:
+                data[key][:, t] = data[key][:, t] * std[pos[t]] + mean[pos[t]]
+        for key in ("v3_mu_position", "v2_mu_position", "kin_mu_position"):
+            if key in data:
+                data[key][:, t] = data[key][:, t] * std[pos[t]] + mean[pos[t]]
+        # Position sigmas: scale by std only
+        for key in ("v3_sigma_position", "v2_sigma_position", "kin_sigma_position"):
+            if key in data:
+                data[key][:, t] = data[key][:, t] * std[pos[t]]
+        # Target quaternion: x*std + mean (predictions already unit-norm)
+        if "target_quaternion" in data:
+            data["target_quaternion"][:, t] = (
+                data["target_quaternion"][:, t] * std[quat[t]] + mean[quat[t]]
+            )
+        # Jaw angle means
+        for key in ("target_angle", "v3_mu_angle", "v2_mu_angle", "kin_mu_angle"):
+            if key in data:
+                data[key][:, t] = data[key][:, t] * std[jaw[t]] + mean[jaw[t]]
+    return data
+
+
+def load_eval_data(
+    path: str | Path,
+    norm_stats: str | Path | None = None,
+) -> dict[str, np.ndarray]:
     """Load evaluation .npz and return contents as a flat dictionary.
 
     Args:
         path: Path to evaluation_data.npz.
+        norm_stats: Optional path to normalization stats (.npz). If given,
+            position/quaternion/sigma arrays are denormalized to physical
+            units (mm, unit quaternions) so figures show real-world scales.
 
     Returns:
         Dictionary mapping array names to NumPy arrays.
@@ -117,6 +181,8 @@ def load_eval_data(path: str | Path) -> dict[str, np.ndarray]:
     if not path.exists():
         raise FileNotFoundError(f"Evaluation data not found: {path}")
     data = dict(np.load(path, allow_pickle=True))
+    if norm_stats is not None:
+        data = _denormalize_eval_data(data, norm_stats)
     return data
 
 
@@ -644,6 +710,16 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Path to JSON-lines training log for Figure S2.",
     )
+    parser.add_argument(
+        "--norm-stats",
+        type=Path,
+        default=Path("checkpoints/btpn_norm.npz"),
+        help=(
+            "Normalization stats (.npz) used to denormalize the saved arrays "
+            "to physical units (mm, unit quaternions). "
+            "Default: checkpoints/btpn_norm.npz. Pass an empty string to skip."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -652,7 +728,13 @@ def main() -> None:
     args = parse_args()
     setup_mpl_style()
 
-    data = load_eval_data(args.data)
+    # Denormalize to physical units when a norm-stats file is given. The
+    # committed evaluation_data.npz stores targets in z-score space, so the
+    # default points at checkpoints/btpn_norm.npz; pass --norm-stats "" to skip.
+    norm_stats = args.norm_stats if str(args.norm_stats) != "" else None
+    if norm_stats is not None and not Path(norm_stats).is_absolute():
+        norm_stats = Path(__file__).resolve().parent.parent / norm_stats
+    data = load_eval_data(args.data, norm_stats=norm_stats)
     output_dir = args.output_dir
     fmt = args.format
 

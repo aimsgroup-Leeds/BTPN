@@ -531,7 +531,10 @@ def load_trial(path: Path) -> dict[str, Any] | None:
     """Load a single trial from disk, auto-detecting the format.
 
     7-DoF / BAPES trials are detected by the presence of ``label.json``.
-    6-DoF trials are detected by the ``Test N`` naming convention.
+    6-DoF trials are detected by the ``Test N`` naming convention or, as a
+    fallback, by the presence of numbered per-frame ``.txt`` files (so the
+    bundled ``data/sample_c`` sample, which is not named ``Test N``, also
+    loads).
 
     Args:
         path: Path to trial directory.
@@ -542,7 +545,7 @@ def load_trial(path: Path) -> dict[str, Any] | None:
     """
     if (path / "label.json").exists():
         return _load_7dof_trial(path)
-    if path.name.startswith("Test "):
+    if path.name.startswith("Test ") or any(path.glob("*.txt")):
         return _load_6dof_trial(path)
     return None
 

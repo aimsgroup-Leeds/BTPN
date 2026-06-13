@@ -525,8 +525,19 @@ def main() -> None:
     print(f"Config: d_model={config.d_model}, scales={config.window_scales}")
 
     # --- Build model and load weights ---
+    # strict=False: foundation checkpoints carry a training-only `aux_decoder`
+    # submodule that is not part of the inference-time model. Any other
+    # missing/unexpected key (i.e. a genuine architecture mismatch) is surfaced.
     model = KinematicFoundationModel(config).to(device)
-    model.load_state_dict(checkpoint["model_state_dict"])
+    missing, unexpected = model.load_state_dict(
+        checkpoint["model_state_dict"], strict=False
+    )
+    unexpected = [k for k in unexpected if not k.startswith("aux_decoder")]
+    if missing or unexpected:
+        print(f"  WARNING: missing keys: {missing[:5]}"
+              f"{'...' if len(missing) > 5 else ''}")
+        print(f"  WARNING: unexpected keys: {unexpected[:5]}"
+              f"{'...' if len(unexpected) > 5 else ''}")
     model.eval()
 
     n_params = sum(p.numel() for p in model.parameters())
