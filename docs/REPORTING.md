@@ -54,7 +54,17 @@ Errors are reported as the mean (root-mean-square) over all evaluation frames. *
 No formal seed-level significance test was performed; differences are reported descriptively. Where a small effect is interpreted (the multi-scale prior's ≈0.3 mm position gain), it was checked against a same-model GPU-noise placebo and found to exceed the noise floor (≈ 2.2×) across 18/20 held-out trials — but this is **not** a seed-level significance test. (An earlier internal "p < 0.001" claim was found unsubstantiated and removed.)
 
 ## 9. Runtime / energy
-End-to-end inference ≈ **307 ms/frame** on a single RTX 3060 (segmentation ≈36 ms, keypoint detection ≈65 ms, depth ≈46 ms, BTPN ≈160 ms). Inference is a **single deterministic forward pass** (no test-time MC sampling). Autoregressive results indicate per-frame execution is not always required. Energy cost was not measured. *(Runtime figures are the implementation's reported values; confirm on your hardware.)*
+**Measured** per-frame inference latency on an **NVIDIA RTX 3060** (batch 1; 15 warm-up + 60 timed iterations; `torch.cuda.synchronize()` around each stage; PyTorch 2.7.1 + CUDA 11.8):
+
+| Stage | Latency |
+|---|---|
+| YOLO segmentation | ≈ 20 ms |
+| YOLO keypoints / pose | ≈ 26 ms |
+| DepthAnything V2 (Small) | ≈ 107 ms (37 ms CPU preprocessing + 70 ms GPU forward) |
+| BTPN temporal model (full `VisualTemporalBTPNv3` forward) | ≈ 117 ms |
+| **End-to-end total** | **≈ 270 ms / frame (≈ 3.7 FPS)** |
+
+The BTPN and depth stages are co-dominant (≈ 43% / ≈ 40%); the two YOLO stages together are ≈ 17%. Inference is a **single deterministic forward pass** (no test-time MC sampling). At batch 1 the BTPN forward is host-dispatch / kernel-launch bound (≈ 16 ms of actual GPU compute spread over ~4,000 small kernels), so this latency is substantially reducible via CUDA graphs / TorchScript / batching. Energy cost was not measured.
 
 ## 10. Memory footprint
 ≈ **0.1 GB** GPU memory at inference; ≈ **19.8 M** parameters (the majority frozen: DepthAnything V2 encoder + the frozen kinematic prior). *(Reported values; confirm on your hardware.)*

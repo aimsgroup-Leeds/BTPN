@@ -48,6 +48,8 @@ Accurate pose tracking of laparoscopic instruments from monocular endoscopic vid
 
 ## Key Results
 
+> :bar_chart: **Full experimental-reporting details** — hyperparameters & selection, data splits, metric definitions, baselines, runtime/memory, failure-mode analysis, and limitations (single-seed; no multi-seed error bars/significance) — are in [`docs/REPORTING.md`](docs/REPORTING.md).
+
 ### (a) Visual Pipeline Components
 
 | Component | Precision | Recall | mAP<sub>50</sub> | mAP<sub>50-95</sub> |
