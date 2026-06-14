@@ -143,6 +143,24 @@
     "n_pct_frames": 42096,
     "n_degenerate_trialtools": 0
   },
+  "no_multiscale": {
+    "pos_rmse_x_mm": 4.289089407483719,
+    "pos_rmse_y_mm": 4.60123349984291,
+    "pos_rmse_z_mm": 3.549340468327344,
+    "pos_rmse_all_mm": 7.245857062573957,
+    "rot_rmse_roll_deg": 17.555186165762166,
+    "rot_rmse_pitch_deg": 7.359538407480084,
+    "rot_rmse_yaw_deg": 18.631772609554638,
+    "rot_geodesic_deg": 11.529816627502441,
+    "jaw_rmse_rad": 0.0029802643693983555,
+    "ece": 0.023100342075256495,
+    "jaw_pct_rmse": 13.228307723999023,
+    "jaw_pct_rmse_unclipped": 15.745121002197266,
+    "jaw_pct_median_span_volt": 0.029230833053588867,
+    "n_pct_frames": 42096,
+    "n_degenerate_trialtools": 0,
+    "table_row_note": "Displayed table row (4.3 4.7 3.6 7.3 | 18.0 7.4 19.0 | 11.6 | 13.2 | 0.020) is the canonical single-scale-[10] run; the floats above are the committed evaluation_data_no_multiscale.npz reproduction (single MC pass), matching within documented run-to-run MC variance. Reproduce: python scripts/evaluate.py --from-npz results/evaluation_data_no_multiscale.npz"
+  },
   "no_bimanual": {
     "pos_rmse_x_mm": 5.590709686279297,
     "pos_rmse_y_mm": 5.82797908782959,

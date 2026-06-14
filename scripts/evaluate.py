@@ -20,10 +20,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+
+# Make the repo root importable when run as a script, so the documented
+# ``python scripts/evaluate.py --from-npz ...`` command resolves ``btpn``
+# without PYTHONPATH set. Must precede the ``from btpn...`` imports below.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import torch
@@ -1254,6 +1260,29 @@ _TABLE_FULL_BTPN: dict[str, float] = {
     "jaw_pct": 13.6, "ece": 0.028,
 }
 
+# Committed Table 2(b) "w/o multiscale" row: the genuine single-scale-[10]
+# kinematic prior (results/all_results.json, no_multiscale; predictions in
+# results/evaluation_data_no_multiscale.npz). Reproduced from that npz via
+# --from-npz results/evaluation_data_no_multiscale.npz. Multi-scale primarily
+# helps position (7.0 vs 7.3 mm |v|); rotation/jaw/ECE are unchanged-to-better.
+_TABLE_NO_MULTISCALE: dict[str, float] = {
+    "pos_x": 4.3, "pos_y": 4.7, "pos_z": 3.6, "pos_v": 7.3,
+    "roll": 18.0, "pitch": 7.4, "yaw": 19.0, "geo": 11.6,
+    "jaw_pct": 13.2, "ece": 0.020,
+}
+
+
+def _select_committed_row(npz_path: Path) -> tuple[dict[str, float], str]:
+    """Pick the committed table row to compare against, from the npz filename.
+
+    ``evaluation_data_no_multiscale.npz`` -> the w/o-multiscale row; anything
+    else -> the Full-BTPN row. Returns (row dict, human label).
+    """
+    if "no_multiscale" in npz_path.name.lower():
+        return _TABLE_NO_MULTISCALE, "BTPN w/o multiscale"
+    return _TABLE_FULL_BTPN, "Full BTPN"
+
+
 # Jaw voltage channel indices in the 30-D kinematic vector: tool1=7, tool2=15.
 _JAW_IDX = (7, 15)
 
@@ -1331,10 +1360,15 @@ def evaluate_from_npz(
     if not npz_path.exists():
         raise FileNotFoundError(f"Predictions npz not found: {npz_path}")
 
+    # Which committed Table-2(b) row this npz reproduces (Full BTPN vs the
+    # w/o-multiscale single-scale prior), inferred from the filename.
+    committed, row_label = _select_committed_row(npz_path)
+
     print("=" * 72)
     print("  BTPN Offline Reproduction (from released predictions .npz)")
     print("=" * 72)
     print(f"  Predictions:  {npz_path}")
+    print(f"  Row:          {row_label}")
     print(f"  Device:       cpu (no model, no full dataset required)")
 
     # npz holds only plain numeric arrays -> allow_pickle=False (no code-exec risk).
@@ -1418,12 +1452,19 @@ def evaluate_from_npz(
     ])
     out["ece"] = float(compute_ece(pe, sig, n_bins=10)["ece"])
     out["ause_norm"] = float(compute_ause(pe, sig, n_steps=20)["ause_normalized"])
-    kappas = data["kappa_quaternion"].reshape(-1)
-    rot_sigma_fisher = 1.0 / np.sqrt(np.maximum(kappas, 1.0))
-    out["rot_ece_fisher"] = float(compute_ece(np.radians(all_rot), rot_sigma_fisher)["ece"])
-    out["jaw_ece"] = float(compute_ece(
-        np.abs(data["mu_angle"] - data["target_angle"]).reshape(-1),
-        data["sigma_angle"].reshape(-1))["ece"])
+    # Rotation (Fisher) and jaw ECE need the vMF kappa and the jaw sigma. The
+    # main released npz carries both; ablation npzs (e.g. the single-scale
+    # w/o-multiscale prediction dump) may omit them, so compute them only when
+    # present -- the pose/position metrics and the headline position ECE above
+    # are always available.
+    if "kappa_quaternion" in data:
+        kappas = data["kappa_quaternion"].reshape(-1)
+        rot_sigma_fisher = 1.0 / np.sqrt(np.maximum(kappas, 1.0))
+        out["rot_ece_fisher"] = float(compute_ece(np.radians(all_rot), rot_sigma_fisher)["ece"])
+    if "sigma_angle" in data:
+        out["jaw_ece"] = float(compute_ece(
+            np.abs(data["mu_angle"] - data["target_angle"]).reshape(-1),
+            data["sigma_angle"].reshape(-1))["ece"])
 
     print(f"  quaternion validity: pred-quat norm (mean) = {qnorm:.4f} (must be ~1.0)")
     geo_med = float(np.median(all_rot)); geo_mean = float(all_rot.mean())
@@ -1432,7 +1473,7 @@ def evaluate_from_npz(
     print()
 
     # --- Side-by-side: reproduced (from npz) vs committed table ---
-    print("  Full BTPN -- Dataset A held-out (reproduced from npz vs committed table)")
+    print(f"  {row_label} -- Dataset A held-out (reproduced from npz vs committed table)")
     print("  " + "-" * 66)
     print(f"  {'Metric':<22}{'Reproduced':>14}{'Table':>12}{'Delta':>12}")
     print("  " + "-" * 66)
@@ -1443,38 +1484,48 @@ def evaluate_from_npz(
         ("Position ECE", "ece"),
     ]
     for label, key in rows:
-        rep = out.get(key); tab = _TABLE_FULL_BTPN.get(key)
+        rep = out.get(key); tab = committed.get(key)
         if rep is None or tab is None:
             continue
         prec = 3 if key == "ece" else 1
         print(f"  {label:<22}{rep:>14.{prec}f}{tab:>12.{prec}f}{rep - tab:>+12.{prec}f}")
     print("  " + "-" * 66)
-    print(f"  rotation ECE (Fisher, physical) = {out['rot_ece_fisher']:.3f} "
-          f"(over-conservative); jaw ECE = {out['jaw_ece']:.3f}")
+    if "rot_ece_fisher" in out and "jaw_ece" in out:
+        print(f"  rotation ECE (Fisher, physical) = {out['rot_ece_fisher']:.3f} "
+              f"(over-conservative); jaw ECE = {out['jaw_ece']:.3f}")
+    else:
+        print("  rotation ECE (Fisher) / jaw ECE: not in this npz "
+              "(no kappa_quaternion / sigma_angle) -- position ECE above is the headline.")
     print(f"  jaw raw cross-check = {out['jaw_rmse_volts']:.4f} V; "
           f"median per-trial GT span = {out['jaw_pct_median_span_volt']:.4f} V")
     print(f"  (Pos |v| 'All' column is RMSE; mean Euclidean = {out['pos_v_mean']:.2f} mm.)")
     print()
 
     # --- Write reproduced LaTeX row + JSON (does NOT overwrite committed tables) ---
+    # The Full-BTPN run writes the canonical *_reproduced.{tex,json}; ablation
+    # npzs write a suffixed copy so they never clobber the headline reproduction.
     output_dir.mkdir(parents=True, exist_ok=True)
-    tex_path = output_dir / "table2b_reproduced.tex"
+    is_full = committed is _TABLE_FULL_BTPN
+    suffix = "" if is_full else "_no_multiscale"
+    row_tex_label = "\\textbf{Full BTPN}" if is_full else "\\quad w/o multiscale"
+    tex_path = output_dir / f"table2b_reproduced{suffix}.tex"
     row = (
-        f"\\textbf{{Full BTPN}} & "
+        f"{row_tex_label} & "
         f"{out['pos_x']:.1f} & {out['pos_y']:.1f} & {out['pos_z']:.1f} & {out['pos_v']:.1f} & "
         f"{out['roll']:.1f} & {out['pitch']:.1f} & {out['yaw']:.1f} & {out['geo']:.1f} & "
         f"{out['jaw_pct']:.1f} & {out['ece']:.3f} \\\\"
     )
     tex_path.write_text(
-        "% Reproduced on CPU from results/evaluation_data.npz via\n"
-        "%   python scripts/evaluate.py --from-npz results/evaluation_data.npz\n"
+        f"% Reproduced on CPU from {npz_path.name} via\n"
+        f"%   python scripts/evaluate.py --from-npz results/{npz_path.name}\n"
         "% Columns: x y z |v| (mm); roll pitch yaw geo (deg); jaw (% opening); position ECE.\n"
         + row + "\n",
         encoding="utf-8",
     )
-    json_path = output_dir / "evaluation_reproduced.json"
+    json_key = "full_btpn_dataset_a" if is_full else "no_multiscale_dataset_a"
+    json_path = output_dir / f"evaluation_reproduced{suffix}.json"
     with open(json_path, "w") as f:
-        json.dump({"full_btpn_dataset_a": out, "committed_table": _TABLE_FULL_BTPN}, f, indent=2)
+        json.dump({json_key: out, "committed_table": committed}, f, indent=2)
     print(f"  Reproduced LaTeX row -> {tex_path}")
     print(f"  Reproduced metrics   -> {json_path}")
     print()
@@ -1513,10 +1564,13 @@ def main() -> None:
         default=None,
         metavar="NPZ",
         help=(
-            "Offline reproduction: recompute Dataset A (Full BTPN) pose + "
-            "calibration metrics directly from a saved predictions .npz "
-            "(e.g. results/evaluation_data.npz). Runs on CPU with NO model "
-            "checkpoint and NO full dataset. See --norm-stats."
+            "Offline reproduction: recompute Dataset A pose + calibration "
+            "metrics directly from a saved predictions .npz. Use "
+            "results/evaluation_data.npz for the Full-BTPN row or "
+            "results/evaluation_data_no_multiscale.npz for the w/o-multiscale "
+            "ablation row (the committed row to compare against is inferred "
+            "from the filename). Runs on CPU with NO model checkpoint and NO "
+            "full dataset. See --norm-stats."
         ),
     )
     parser.add_argument(

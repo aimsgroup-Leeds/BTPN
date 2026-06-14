@@ -24,10 +24,10 @@
 **Architecture overview.** BTPN is built from five components, mapped onto the three panels above.
 
 - **Visual feature extraction (panel a).** YOLOv26m-seg localises and segments both tools, producing per-tool ROI crops that YOLOv26m-pose turns into 8 keypoints each (proximal/distal shaft, joint, tip and both jaws); a gated fusion of these cues yields a 256D visual token. DepthAnything V2 (Small), a frozen DINOv2 encoder, adds 128D monocular depth cues.
-- **Kinematic Foundation Model (panel c).** A self-supervised, ~1.2M-parameter encoder embeds the 30D per-frame kinematic state (position **p**, quaternion **q** and jaw for both tools) to 256D. A bidirectional context window (*f*<sub>*t*&minus;5..*t*+4</sub>) drives masked-pose reconstruction during pre-training and future-pose prediction during fine-tuning, learned over ~330K electromagnetic-tracking frames.
-- **Hierarchical Temporal Transformer (panel b).** Six layers apply windowed attention at clinically motivated scales — local (8 frames &approx;0.6 s), medium (20 frames &approx;1.5 s) and global — each scale pairing an attention block with a refinement block, then fused by cross-scale multi-head attention.
+- **Kinematic Foundation Model (panel c).** A ~1.2M-parameter Hierarchical Temporal Transformer embeds the 30D per-frame kinematic state (position **p**, quaternion **q** and jaw for both tools) to 256D. It is trained to predict the next-frame pose from a causal context window over ~330K electromagnetic-tracking frames (single-phase supervised regression); attention is non-causal *within* the window, but the window ends at the current frame. Windowed attention spans clinically-motivated scales (10/50/100 frames, &approx;0.8/3.8/7.7 s at 13 fps) for micro-gestures, purposeful actions and task phases; a learned memory bank (trainable prototype vectors) and quaternion-aware bimanual cross-attention (each tool attends over its own sequence, then into the other tool, via a learned gate) capture recurring patterns and inter-tool coordination.
+- **Hierarchical Temporal Transformer (panel b).** Windowed attention at the three clinically-motivated scales above (10/50/100 frames) pairs, at each scale, an attention block with a refinement block; the per-scale representations are then combined by cross-scale multi-head attention. These scales follow measured peg-transfer action durations (reach &approx;1.1 s, grasp &approx;1.2 s, transfer &approx;2.4 s, place &approx;2.0 s), with local micro-gestures nested inside the longer phases.
 - **Memory-Enhanced Encoder (panel c).** Each tool is projected separately and the two are coupled by quaternion-aware bimanual cross-attention with learnable gates; a memory bank — queried by the temporal sequence, with the pose embeddings as keys/values — stores the per-scale kinematic embeddings.
-- **Cross-modal fusion + pose heads (panel a).** An image-based HTT/MEE produces visual embeddings **V**; four-head attention (**V** as queries, kinematic **K** as keys/values) yields a fused 256D visual-kinematic token. Gated residual corrections to the kinematic prior — per-channel confidence gates (position &le; 0.5, rotation &le; 0.3, jaw &le; 0.5) prevent noisy visual estimates from corrupting modalities where kinematics are already accurate — feed separate heads predicting position (Cholesky-factored Gaussian), orientation (von Mises&ndash;Fisher concentration on **S**<sup>3</sup>) and jaw (scalar Gaussian) with calibrated Bayesian uncertainty.
+- **Visual encoder + cross-modal fusion + pose heads (panel a).** An image-based encoder, **pre-trained by masked visual reconstruction** (self-supervised) and visual&ndash;kinematic alignment, produces a visual embedding **V**; a **gated cross-modal fusion** combines **V** with the kinematic embedding **K** into a 256D visual-kinematic token. Gated residual corrections to the kinematic prior — per-channel confidence gates (position and jaw &le; 0.5, rotation &le; 0.1) prevent noisy visual estimates from corrupting modalities where kinematics are already accurate — feed separate heads predicting position (Cholesky-factored Gaussian), orientation (von Mises&ndash;Fisher concentration on **S**<sup>3</sup>) and jaw (scalar Gaussian) with calibrated Bayesian uncertainty.
 
 ## Abstract
 
@@ -66,9 +66,12 @@ Accurate pose tracking of laparoscopic instruments from monocular endoscopic vid
 | Visual + TCN | 15.1 | 11.9 | 11.0 | 22.1 | 72.0 | 37.3 | 68.6 | 66.4 | 41.9 | 0.240 |
 | Visual + VTT | 16.4 | 13.7 | 12.5 | 24.7 | 74.0 | 45.6 | 79.7 | 69.0 | 42.2 | 0.115 |
 | Kinematic regr. | 5.2 | 5.8 | 3.9 | 8.7 | 33.1 | 17.2 | 31.2 | 27.6 | 14.4 | 0.098 |
+| BTPN w/o multiscale | 4.3 | 4.7 | 3.6 | 7.3 | 18.0 | 7.4 | 19.0 | 11.6 | 13.2 | 0.020 |
 | **Full BTPN** | **4.2** | **4.4** | **3.4** | **7.0** | **14.4** | **7.3** | **15.6** | **11.7** | **13.6** | **0.028** |
 
-> Position errors in mm, rotation errors in degrees. Geo = geodesic distance on SO(3). Jaw is reported as **% of the per-trial 10/90-percentile opening range** (the jaw signal is a raw sensor voltage with no voltage-to-angle calibration). ECE is the position calibration error (L2, mm); the Full-BTPN ECE cell (**0.028**) is the value reproduced by `python scripts/evaluate.py --from-npz results/evaluation_data.npz`. The full ablation set (incl. *w/o kinematic prior / bimanual / calibration*) is in [`results/table2b.tex`](results/table2b.tex); the *w/o multiscale* ablation is being re-run and will be updated there.
+> Position errors in mm, rotation errors in degrees. Geo = geodesic distance on SO(3). Jaw is reported as **% of the per-trial 10/90-percentile opening range** (the jaw signal is a raw sensor voltage with no voltage-to-angle calibration). ECE is the position calibration error (L2, mm); the Full-BTPN ECE cell (**0.028**) is the value reproduced by `python scripts/evaluate.py --from-npz results/evaluation_data.npz`. The *w/o multiscale* row is the genuine single-scale-[10] kinematic prior and is reproducible from `python scripts/evaluate.py --from-npz results/evaluation_data_no_multiscale.npz`. The full ablation set (incl. *w/o kinematic prior / bimanual / calibration*) is in [`results/table2b.tex`](results/table2b.tex).
+>
+> Multi-scale primarily benefits **position** (7.0 vs 7.3 mm ‖v‖; ~0.3 mm, 18/20 held-out trials, above the run-to-run noise floor); rotation/jaw/ECE are unchanged-to-slightly-better without it. The benefit is a broadly-distributed refinement, not localized to specific motion regimes.
 
 ### (c) Cross-Dataset Generalisation
 
@@ -86,13 +89,13 @@ Accurate pose tracking of laparoscopic instruments from monocular endoscopic vid
   <img src="figures/output_comparison.png" alt="7-DoF Trajectory Predictions" width="90%"/>
 </p>
 
-**7-DoF predictions for a held-out trial sequence.** Ground truth (black solid) vs BTPN predictions (blue dashed) with &plusmn;2&sigma; uncertainty bands (shaded). Left column shows position (X, Y, Z in mm); right column shows Euler rotation components (degrees) and the jaw opening signal (normalised sensor units). The model accurately tracks rapid tool motions with well-calibrated uncertainty that widens during challenging periods.
+**7-DoF predictions for a held-out trial sequence.** Ground truth (black solid) vs BTPN predictions (blue dashed) with &plusmn;2&sigma; uncertainty bands (shaded). Left column shows position (X, Y, Z in mm); right column shows Euler rotation components (degrees) and the jaw opening signal (% of the per-trial 10/90-percentile opening range). The model accurately tracks rapid tool motions with well-calibrated uncertainty that widens during challenging periods.
 
 <p align="center">
   <img src="figures/uncertainty_quality.png" alt="Uncertainty Quality Assessment" width="90%"/>
 </p>
 
-**Uncertainty quality assessment.** **(a)** Reliability diagram: position (ECE = 0.028) and jaw angle (ECE = 0.079) are well-calibrated, while rotation is over-conservative / under-confident (ECE = 0.301, i.e. its ±&sigma; intervals cover more than the nominal rate), reflecting the inherent difficulty of recovering orientation from monocular images. **(b)** Mean position error binned by predicted &sigma; (*r* = 0.60): a clear monotonic trend confirms higher predicted uncertainty corresponds to higher actual error. **(c)** Sparsification curve: discarding the most uncertain 50% of predictions reduces mean error from 5.5 mm to ~4.6 mm (AUSE = 0.95 mm), close to the oracle ordering by true error. **(d)** Position error stratified by detection confidence — error is 5.3 mm at high confidence (*n* = 20,258) and degrades to 22.2 mm only for rare low-confidence frames (*n* = 121). This figure is reproduced by `python scripts/make_uncertainty_figure.py`.
+**Uncertainty quality assessment.** **(a)** Reliability diagram: position (ECE = 0.028) and jaw (ECE = 0.079) are well-calibrated, while rotation is over-conservative / under-confident (ECE = 0.301, i.e. its ±&sigma; intervals cover more than the nominal rate), reflecting the inherent difficulty of recovering orientation from monocular images. **(b)** Mean position error binned by predicted &sigma; (*r* = 0.60): a clear monotonic trend confirms higher predicted uncertainty corresponds to higher actual error. **(c)** Sparsification curve: discarding the most uncertain 50% of predictions reduces mean error from 5.5 mm to ~4.6 mm (AUSE = 0.95 mm), close to the oracle ordering by true error. **(d)** Position error stratified by detection confidence — error is 5.3 mm at high confidence (*n* = 20,258) and degrades to 22.2 mm only for rare low-confidence frames (*n* = 121). This figure is reproduced by `python scripts/make_uncertainty_figure.py`.
 
 ### Datasets
 
@@ -236,7 +239,10 @@ python scripts/evaluate.py --checkpoint checkpoints/btpn_supervised.pt --dataset
 # Four-panel calibration figure (figures/uncertainty_quality.{png,pdf})
 python scripts/make_uncertainty_figure.py
 
-# Trajectories + a lighter position-uncertainty summary + supplementary
+# Combined output comparison (figures/output_comparison.{png,pdf}); jaw in % opening
+python scripts/generate_figures.py --data results/evaluation_data.npz --figure OC --output-dir figures
+
+# Output comparison + trajectories + a lighter position-uncertainty summary + supplementary
 python scripts/generate_figures.py --data results/evaluation_data.npz --all --output-dir figures
 ```
 

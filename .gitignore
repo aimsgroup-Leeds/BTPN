@@ -39,6 +39,8 @@ outputs/
 # regenerable on demand; the canonical numbers live in README + results/table2*.tex.
 results/table2b_reproduced.tex
 results/evaluation_reproduced.json
+results/table2b_reproduced_no_multiscale.tex
+results/evaluation_reproduced_no_multiscale.json
 results/evaluation/
 results/results_table.txt
 

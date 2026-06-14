@@ -124,7 +124,7 @@ def _plot_reliability(ax, ece_data) -> None:
         cov = ece_data[key]["global_coverages"]
         ece = ece_data[key]["ece"]
         obs = [cov[l] for l in levels]
-        label = {"position": "Position", "rotation": "Rotation", "jaw": "Jaw Angle"}[key]
+        label = {"position": "Position", "rotation": "Rotation", "jaw": "Jaw"}[key]
         ax.plot(expected, obs, marker + "-", color=color, markersize=5,
                 linewidth=1.2, zorder=3, label=f"{label} ({ece:.3f})")
     ax.set_xlabel("Expected coverage")
