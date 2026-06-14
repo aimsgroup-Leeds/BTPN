@@ -84,5 +84,22 @@ BTPN performs vision-only 7-DoF tool tracking on non-robotic laparoscopic peg-tr
 
 ---
 
+## Exploratory: inference-efficiency / modality tradeoff (repo-only, not in the paper)
+
+Two lighter visual variants were trained (single seed, reusing the frozen kinematic prior + the same ablation recipe) to probe the accuracy ↔ latency tradeoff on an RTX 3060:
+
+| Variant | Pos ‖v‖ (mm) | Geo (°) | Jaw (%) | ECE | End-to-end | FPS |
+|---|---|---|---|---|---|---|
+| Full (seg + keypoints + depth) | 7.0 | 11.7 | 13.6 | 0.027 | ~270 ms | 3.7 |
+| w/o depth (seg + keypoints) | 7.1 | 11.8 | 13.4 | 0.016 | ~163 ms | 6.1 |
+| seg-only (no depth, no keypoints) | 7.0 | 11.9 | 13.4 | 0.013 | ~137 ms | 7.3 |
+
+**Read:** accuracy is preserved within single-seed noise while end-to-end latency drops ~40% (no-depth) to ~49% (seg-only) — dropping DepthAnything (the ~107 ms dominant stage) and keypoints (~26 ms) costs essentially no accuracy here. The variants are genuine (depth/pose parameters absent, not zeroed).
+
+**Caveats (do not over-read):**
+- **Single seed** — accuracy differences (pos 7.0/7.1, geo 11.7→11.9) are within noise; the honest takeaway is **parity**, not that fewer modalities improve accuracy.
+- **Latency is by construction** — perception stages are measured and the BTPN forward is held at its ~117 ms reference (self-timed forwards confirm it is modality-independent); the savings (depth ≈107 ms, keypoints ≈26 ms) are real, but the end-to-end totals are estimates, not a fresh wall-clock end-to-end.
+- **ECE** appears lower without depth, but this is single-seed and the Full baseline came from a different run context — **not** a claim that dropping modalities improves calibration.
+
 ## Ethics Approval Statement
 Approval for the dataset collection was granted by the University of Leeds Faculty of Engineering and Physical Sciences Research Ethics Committee (ref: MEEC 22-023). It contains no personally identifiable information nor human body parts. All other datasets used in this study are entirely non-identifiable, open-source, or simulated data and meet the requirements set by the standards at the University of Leeds, so there are no ethical concerns.

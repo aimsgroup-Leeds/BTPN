@@ -85,6 +85,18 @@ Accurate pose tracking of laparoscopic instruments from monocular endoscopic vid
 
 > &Delta;Rot is the per-step angular-velocity RMSE (deg/step); positions in mm. Datasets B and C use per-trial normalisation to absorb inter-trial electromagnetic-reference offsets. Dataset C is 6-DoF and has no jaw sensor.
 
+### Inference-efficiency variants (exploratory — repo-only, not in the paper)
+
+Two lighter visual variants (single-seed ablations reusing the frozen kinematic prior) probe the accuracy↔latency tradeoff on an RTX 3060:
+
+| Variant | Pos ‖v‖ (mm) | Geo (°) | Jaw (%) | ECE | End-to-end | FPS |
+| --- | --- | --- | --- | --- | --- | --- |
+| Full (seg + keypoints + depth) | 7.0 | 11.7 | 13.6 | 0.027 | ~270 ms | 3.7 |
+| w/o depth (seg + keypoints) | 7.1 | 11.8 | 13.4 | 0.016 | ~163 ms | 6.1 |
+| seg-only (no depth, no keypoints) | 7.0 | 11.9 | 13.4 | 0.013 | ~137 ms | 7.3 |
+
+Accuracy is preserved within single-seed noise while latency drops ~40–49% (DepthAnything ≈107 ms + keypoints ≈26 ms removed). Single-seed / constructed-latency caveats and method are in [`docs/REPORTING.md`](docs/REPORTING.md). Not part of the paper.
+
 ### Qualitative Results
 
 <p align="center">
