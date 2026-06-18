@@ -423,6 +423,6 @@ This project is licensed under [CC BY-NC 4.0](LICENSE). You may use and adapt th
 
 Per-item coverage of the [MICCAI 2026 experimental-reporting guidelines](https://conferences.miccai.org/2026/en/PAPER-SUBMISSION-GUIDELINES.html) — hyperparameters and their selection, data splits, metric definitions, baseline implementation/tuning, runtime/memory, failure-mode analysis, computing infrastructure, clinical significance, and the limitations (single-seed training, no multi-seed error bars or formal significance tests) — is in [`docs/REPORTING.md`](docs/REPORTING.md).
 
-## Ethics Approval
+## Acknowledgements
 
-Approval for the dataset collection was granted by the University of Leeds Faculty of Engineering and Physical Sciences Research Ethics Committee (ref: MEEC 22-023). It contains no personally identifiable information nor human body parts. All other datasets used in this study are entirely non-identifiable, open-source, or simulated data and meet the requirements set by the standards at the University of Leeds, so there are no ethical concerns.
+We would like to thank the organisers of the Urology Simulation Boot Camps in Leeds, UK, the British Association of Paediatric Endoscopic Surgeons and all surgeons who spent time completing the data collection across all these events. The work was funded by UKRI EPSRC grants EP/S024336/1, UKRI914 and UKRI180. Approval for the dataset collection was granted by the University of Leeds Faculty of Engineering and Physical Sciences Research Ethics Committee (ref: EPS 2211 and MEEC 22-023).
