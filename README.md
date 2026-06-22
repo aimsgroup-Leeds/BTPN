@@ -130,9 +130,10 @@ Accuracy is preserved within single-seed noise while latency drops ~40–49% (De
 </tr>
 </table>
 
-> **Full dataset download:** _to be added._ The full datasets (raw video,
-> kinematics and precomputed visual features) are not yet publicly hosted; the
-> link will be added here. Training (`scripts/train.py`) and the full
+> **Full dataset download:** the datasets are released as the **LASK** dataset on
+> Zenodo — [doi.org/10.5281/zenodo.20752650](https://doi.org/10.5281/zenodo.20752650)
+> (raw video, kinematics and precomputed visual features). Please cite it (see
+> [Citation](#citation)). Training (`scripts/train.py`) and the full
 > evaluation path **(B)** require these. **You do not need them to reproduce the
 > headline Dataset-A table or the figures** — the committed
 > `results/evaluation_data.npz` and the bundled `data/sample_a` + `data/sample_c`
@@ -412,6 +413,19 @@ If you find this work useful, please cite:
   booktitle = {Medical Image Computing and Computer Assisted Intervention
                (MICCAI)},
   year      = {2026}
+}
+```
+
+If you use the dataset, please also cite the **LASK** dataset:
+
+```bibtex
+@dataset{choudhry2026lask,
+  title     = {{LASK}: A Dataset for Laparoscopic Skill and 7-DoF Kinematics},
+  author    = {Choudhry, Omar and Jones, Dominic},
+  year      = {2026},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.20752650},
+  url       = {https://doi.org/10.5281/zenodo.20752650}
 }
 ```
 

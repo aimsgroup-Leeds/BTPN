@@ -24,3 +24,16 @@ keywords:
   - transformer
   - bayesian deep learning
   - tool tracking
+references:
+  - type: data
+    title: "LASK: A Dataset for Laparoscopic Skill and 7-DoF Kinematics"
+    authors:
+      - family-names: Choudhry
+        given-names: Omar
+      - family-names: Jones
+        given-names: Dominic
+    year: 2026
+    publisher:
+      name: Zenodo
+    doi: "10.5281/zenodo.20752650"
+    url: "https://doi.org/10.5281/zenodo.20752650"
