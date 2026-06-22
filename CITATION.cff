@@ -30,6 +30,12 @@ references:
     authors:
       - family-names: Choudhry
         given-names: Omar
+      - family-names: Ali
+        given-names: Sharib
+      - family-names: Biyani
+        given-names: "Chandra Shekhar"
+      - family-names: Rajasundaram
+        given-names: Ramanan
       - family-names: Jones
         given-names: Dominic
     year: 2026

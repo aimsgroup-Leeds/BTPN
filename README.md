@@ -421,7 +421,8 @@ If you use the dataset, please also cite the **LASK** dataset:
 ```bibtex
 @dataset{choudhry2026lask,
   title     = {{LASK}: A Dataset for Laparoscopic Skill and 7-DoF Kinematics},
-  author    = {Choudhry, Omar and Jones, Dominic},
+  author    = {Choudhry, Omar and Ali, Sharib and Biyani, Chandra Shekhar
+               and Rajasundaram, Ramanan and Jones, Dominic},
   year      = {2026},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.20752650},
